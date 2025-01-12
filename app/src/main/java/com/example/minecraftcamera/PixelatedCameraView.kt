@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.view.Surface
 import java.nio.IntBuffer
 import java.nio.ByteBuffer
 
@@ -84,14 +85,28 @@ class PixelatedCameraView(context: Context) : GLSurfaceView(context) {
 
                 // 根据屏幕方向旋转位图
                 val matrix = android.graphics.Matrix()
-                when (displayRotation) {
-                    Surface.ROTATION_0 -> matrix.postRotate(0f)
-                    Surface.ROTATION_90 -> matrix.postRotate(90f)
-                    Surface.ROTATION_180 -> matrix.postRotate(180f)
-                    Surface.ROTATION_270 -> matrix.postRotate(270f)
+                
+                // 根据设备方向旋转
+                val rotation = when (displayRotation) {
+                    Surface.ROTATION_0 -> 0f
+                    Surface.ROTATION_90 -> 270f
+                    Surface.ROTATION_180 -> 180f
+                    Surface.ROTATION_270 -> 90f
+                    else -> 0f
                 }
 
-                // 应用旋转
+                // 计算旋转中心点
+                val centerX = width / 2f
+                val centerY = height / 2f
+                
+                // 先旋转
+                matrix.postRotate(rotation, centerX, centerY)
+                
+                // 然后垂直翻转图像
+                matrix.postScale(1f, -1f)
+                matrix.postTranslate(0f, height.toFloat())
+
+                // 应用变换
                 val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, width, height, matrix, true)
                 bitmap.recycle()
 
