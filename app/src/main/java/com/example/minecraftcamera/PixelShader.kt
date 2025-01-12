@@ -14,12 +14,13 @@ class PixelShader {
     private var textureHandle: Int = 0
     private var pixelSizeHandle: Int = 0
     private var texSizeHandle: Int = 0
+    private var transformMatrixHandle: Int = 0
     
     private val vertexShaderCode = """
         attribute vec4 position;
         attribute vec2 texCoord;
         varying vec2 texCoordVarying;
-        uniform vec2 texSize;
+        uniform mat4 transformMatrix;
         
         void main() {
             gl_Position = position;
@@ -34,32 +35,33 @@ class PixelShader {
         uniform samplerExternalOES texture;
         uniform float pixelSize;
         uniform vec2 texSize;
+        uniform mat4 transformMatrix;
         
         void main() {
+            vec2 transformedCoord = (transformMatrix * vec4(texCoordVarying, 0.0, 1.0)).xy;
+            
             vec2 texelSize = 1.0 / texSize;
             float pxSize = max(1.0, pixelSize);
             
-            vec2 blocks = floor(texCoordVarying * texSize / pxSize);
-            vec2 pixelated = (blocks * pxSize + pxSize * 0.5) * texelSize;
+            vec2 blocks = floor(transformedCoord * texSize / pxSize);
+            vec2 avgPos = (blocks * pxSize + pxSize * 0.5) * texelSize;
             
-            pixelated = clamp(pixelated, vec2(0.0), vec2(1.0));
-            
-            gl_FragColor = texture2D(texture, pixelated);
+            gl_FragColor = texture2D(texture, avgPos);
         }
     """
 
     private val vertices = floatArrayOf(
-        -1.0f, 1.0f,
-        -1.0f, -1.0f,
-        1.0f, 1.0f,
-        1.0f, -1.0f
+        -1.0f, -1.0f,  // 左下
+        1.0f, -1.0f,   // 右下
+        -1.0f, 1.0f,   // 左上
+        1.0f, 1.0f     // 右上
     )
 
     private val texCoords = floatArrayOf(
-        0.0f, 0.0f,
-        0.0f, 1.0f,
-        1.0f, 0.0f,
-        1.0f, 1.0f
+        0.0f, 0.0f,    // 左下
+        1.0f, 0.0f,    // 右下
+        0.0f, 1.0f,    // 左上
+        1.0f, 1.0f     // 右上
     )
 
     private lateinit var vertexBuffer: FloatBuffer
@@ -120,6 +122,7 @@ class PixelShader {
             textureHandle = GLES20.glGetUniformLocation(program, "texture")
             pixelSizeHandle = GLES20.glGetUniformLocation(program, "pixelSize")
             texSizeHandle = GLES20.glGetUniformLocation(program, "texSize")
+            transformMatrixHandle = GLES20.glGetUniformLocation(program, "transformMatrix")
 
             GLES20.glDeleteShader(vertexShader)
             GLES20.glDeleteShader(fragmentShader)
@@ -129,7 +132,7 @@ class PixelShader {
         }
     }
 
-    fun draw(textureId: Int, pixelSize: Float, width: Float, height: Float) {
+    fun draw(textureId: Int, pixelSize: Float, width: Float, height: Float, transformMatrix: FloatArray) {
         if (textureId <= 0) {
             Log.e("PixelShader", "Invalid texture ID: $textureId")
             return
@@ -160,6 +163,7 @@ class PixelShader {
             GLES20.glUniform1i(textureHandle, 0)
             GLES20.glUniform1f(pixelSizeHandle, pixelSize)
             GLES20.glUniform2f(texSizeHandle, width, height)
+            GLES20.glUniformMatrix4fv(transformMatrixHandle, 1, false, transformMatrix, 0)
             checkGlError("Setup uniforms")
 
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)

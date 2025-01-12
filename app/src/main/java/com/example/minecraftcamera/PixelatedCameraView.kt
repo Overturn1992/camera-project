@@ -56,14 +56,22 @@ class PixelatedCameraView(context: Context) : GLSurfaceView(context) {
         private var surfaceHeight: Int = 0
         private var isContextCreated = false
         private var displayRotation: Int = 0
+        private val transformMatrix = FloatArray(16)
 
         fun setDisplayRotation(rotation: Int) {
             displayRotation = rotation
+            updateTextureMatrix()
+        }
+
+        private fun updateTextureMatrix() {
             surfaceTexture?.let { texture ->
-                when (rotation) {
-                    0 -> texture.setDefaultBufferSize(surfaceWidth, surfaceHeight)
+                // 获取相机的变换矩阵
+                texture.getTransformMatrix(transformMatrix)
+                
+                // 根据显示方向调整缓冲区大小
+                when (displayRotation) {
+                    0, 180 -> texture.setDefaultBufferSize(surfaceWidth, surfaceHeight)
                     90, 270 -> texture.setDefaultBufferSize(surfaceHeight, surfaceWidth)
-                    180 -> texture.setDefaultBufferSize(surfaceWidth, surfaceHeight)
                 }
             }
         }
@@ -88,8 +96,8 @@ class PixelatedCameraView(context: Context) : GLSurfaceView(context) {
                 }
                 
                 GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
-                GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
-                GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+                GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST)
+                GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST)
                 GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
                 GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
                 
@@ -97,19 +105,15 @@ class PixelatedCameraView(context: Context) : GLSurfaceView(context) {
                 surfaceTexture = SurfaceTexture(textureId).apply {
                     setOnFrameAvailableListener { 
                         requestRender() 
-                        Log.d(TAG, "New frame available")
                     }
                 }
 
                 try {
                     pixelShader = PixelShader()
                     isContextCreated = true
-                    Log.d(TAG, "PixelShader initialized successfully")
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to initialize PixelShader", e)
                 }
-                
-                Log.d(TAG, "Surface created successfully with texture ID: $textureId")
             } catch (e: Exception) {
                 Log.e(TAG, "Error in onSurfaceCreated", e)
             }
@@ -120,62 +124,34 @@ class PixelatedCameraView(context: Context) : GLSurfaceView(context) {
             surfaceWidth = width
             surfaceHeight = height
             GLES20.glViewport(0, 0, width, height)
-            setDisplayRotation(displayRotation)
+            
+            // 更新变换矩阵和缓冲区大小
+            updateTextureMatrix()
         }
 
         override fun onDrawFrame(gl: GL10?) {
             try {
-                if (!isContextCreated) {
-                    Log.e(TAG, "OpenGL context not created")
+                if (!isContextCreated || textureId <= 0) {
+                    Log.w(TAG, "Context not created or invalid texture id")
                     return
                 }
 
-                if (textureId <= 0) {
-                    Log.e(TAG, "Invalid texture ID in onDrawFrame")
-                    return
-                }
-
-                surfaceTexture?.updateTexImage()
-                
-                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-                
-                var error = GLES20.glGetError()
-                if (error != GLES20.GL_NO_ERROR) {
-                    Log.e(TAG, "GL error before draw: ${getErrorString(error)}")
-                    return
-                }
-                
-                pixelShader?.let { shader ->
-                    shader.draw(textureId, pixelSize, surfaceWidth.toFloat(), surfaceHeight.toFloat())
-                } ?: run {
-                    Log.e(TAG, "PixelShader not initialized")
-                    // 尝试重新初始化
-                    if (isContextCreated) {
-                        try {
-                            pixelShader = PixelShader()
-                            Log.d(TAG, "PixelShader re-initialized")
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to re-initialize PixelShader", e)
-                        }
-                    }
-                }
-                
-                error = GLES20.glGetError()
-                if (error != GLES20.GL_NO_ERROR) {
-                    Log.e(TAG, "GL error after draw: ${getErrorString(error)}")
+                surfaceTexture?.let { texture ->
+                    texture.updateTexImage()
+                    updateTextureMatrix()
+                    
+                    GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+                    
+                    pixelShader?.draw(
+                        textureId,
+                        pixelSize,
+                        surfaceWidth.toFloat(),
+                        surfaceHeight.toFloat(),
+                        transformMatrix
+                    )
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error in onDrawFrame", e)
-            }
-        }
-
-        private fun getErrorString(error: Int): String {
-            return when (error) {
-                GLES20.GL_INVALID_ENUM -> "Invalid enum"
-                GLES20.GL_INVALID_VALUE -> "Invalid value"
-                GLES20.GL_INVALID_OPERATION -> "Invalid operation"
-                GLES20.GL_OUT_OF_MEMORY -> "Out of memory"
-                else -> "Error code: $error"
             }
         }
     }
