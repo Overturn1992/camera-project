@@ -6,12 +6,14 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
@@ -70,14 +72,18 @@ fun CameraScreen() {
     }
     
     Box(modifier = Modifier.fillMaxSize()) {
+        var pixelatedPreview by remember { mutableStateOf<PixelatedCameraView?>(null) }
+        var pixelSize by remember { mutableStateOf(8f) }
+        
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { context ->
-                PreviewView(context).apply {
-                    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                PixelatedCameraView(context).apply {
+                    setPixelSize(pixelSize)
+                    pixelatedPreview = this
                 }
             }
-        ) { previewView ->
+        ) { view ->
             val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
             
             cameraProviderFuture.addListener({
@@ -87,7 +93,21 @@ fun CameraScreen() {
                     .setTargetRotation(deviceRotation)
                     .build()
                     .also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
+                        it.setSurfaceProvider { request ->
+                            val surfaceTexture = pixelatedPreview?.getSurfaceTexture()
+                            if (surfaceTexture != null) {
+                                surfaceTexture.setDefaultBufferSize(
+                                    request.resolution.width,
+                                    request.resolution.height
+                                )
+                                pixelatedPreview?.setPreviewSize(
+                                    request.resolution.width,
+                                    request.resolution.height
+                                )
+                                val surface = Surface(surfaceTexture)
+                                request.provideSurface(surface, executor) { }
+                            }
+                        }
                     }
 
                 imageCapture = ImageCapture.Builder()
@@ -110,24 +130,79 @@ fun CameraScreen() {
             }, executor)
         }
 
-        IconButton(
-            onClick = {
-                takePhoto(
-                    imageCapture = imageCapture,
-                    context = context,
-                    executor = executor
-                )
-            },
+        // 添加拍照按钮和像素大小滑块
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 32.dp)
-                .size(72.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.PhotoCamera,
-                contentDescription = "Take photo",
-                modifier = Modifier.size(48.dp)
-            )
+            // 像素大小滑块
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "像素大小",
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Slider(
+                    value = pixelSize,
+                    onValueChange = { 
+                        pixelSize = it
+                        pixelatedPreview?.setPixelSize(it)
+                    },
+                    valueRange = 2f..20f,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp)
+                )
+                Text(
+                    text = String.format("%.0f", pixelSize),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            // 拍照按钮
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 16.dp)
+            ) {
+                // 外圈白色圆形背景
+                Surface(
+                    modifier = Modifier.size(80.dp),
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.8f),
+                    shadowElevation = 4.dp
+                ) {
+                    // 内圈蓝色圆形按钮
+                    Surface(
+                        modifier = Modifier
+                            .padding(4.dp)
+                            .fillMaxSize(),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        onClick = {
+                            takePhoto(
+                                imageCapture = imageCapture,
+                                context = context,
+                                executor = executor
+                            )
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhotoCamera,
+                            contentDescription = "拍照",
+                            modifier = Modifier
+                                .size(40.dp)
+                                .padding(8.dp),
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
         }
     }
 }
