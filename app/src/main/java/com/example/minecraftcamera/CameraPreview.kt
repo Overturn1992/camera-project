@@ -2,6 +2,7 @@ package com.example.minecraftcamera
 
 import android.util.Log
 import android.view.Surface
+import android.widget.Toast
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -65,6 +66,8 @@ fun CameraScreen() {
                         }
                         
                         Log.i(TAG, "Got surface texture successfully")
+                        view.setPreviewSize(request.resolution.width, request.resolution.height)
+                        
                         texture.setDefaultBufferSize(
                             request.resolution.width,
                             request.resolution.height
@@ -114,7 +117,12 @@ fun CameraScreen() {
                 .background(Color.Black.copy(alpha = 0.3f))
         ) {
             IconButton(
-                onClick = { /* TODO */ },
+                onClick = { 
+                    pixelatedView.takePhoto(context) { uri ->
+                        // 拍照成功后的回调
+                        Toast.makeText(context, "照片已保存", Toast.LENGTH_SHORT).show()
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .size(72.dp)

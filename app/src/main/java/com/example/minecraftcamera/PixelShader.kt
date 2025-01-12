@@ -17,13 +17,24 @@ class PixelShader {
     private var transformMatrixHandle: Int = 0
     
     private val vertexShaderCode = """
+        precision mediump float;
         attribute vec4 position;
         attribute vec2 texCoord;
         varying vec2 texCoordVarying;
         uniform mat4 transformMatrix;
+        uniform vec2 texSize;
         
         void main() {
-            gl_Position = position;
+            float texAspect = texSize.x / texSize.y;
+            vec4 pos = position;
+            
+            if (texAspect > 1.0) {
+                pos.y = position.y / texAspect;
+            } else {
+                pos.x = position.x * texAspect;
+            }
+            
+            gl_Position = pos;
             texCoordVarying = texCoord;
         }
     """
